@@ -2,103 +2,81 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8" />
-<title>Hand ROM Analyzer (Multi-finger)</title>
+<title>Hand ROM Analyzer（2指グループ固定）</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
 body{
   font-family: system-ui, -apple-system, BlinkMacSystemFont;
-  background:#111;
-  color:#eee;
-  margin:0;
-  padding:16px;
+  background:#111; color:#eee;
+  margin:0; padding:16px;
 }
 h1{font-size:18px;margin:0 0 8px 0;}
+#guide{
+  font-size:13px; background:#222;
+  padding:10px; border-radius:8px; margin-bottom:10px;
+}
 #controls{margin-bottom:10px;}
 #result{
-  margin-top:10px;
-  padding:10px;
-  background:#1c1c1c;
-  border-radius:8px;
-  line-height:1.5;
+  margin-top:10px; padding:10px;
+  background:#1c1c1c; border-radius:8px; line-height:1.5;
 }
 #hud{
-  position:fixed;
-  top:8px;
-  left:8px;
-  font-size:11px;
-  color:#9f9;
-}
-#guide{
-  font-size:13px;
-  background:#222;
-  padding:10px;
-  border-radius:8px;
-  margin-bottom:10px;
+  position:fixed; top:8px; left:8px;
+  font-size:11px; color:#9f9;
 }
 #buttons{
-  position:fixed;
-  right:12px;
-  bottom:12px;
-  display:flex;
-  gap:10px;
+  position:fixed; right:12px; bottom:12px;
+  display:flex; gap:10px;
 }
 button{
-  background:#333;
-  color:#fff;
-  border:none;
-  padding:10px 12px;
-  border-radius:8px;
-  font-size:13px;
+  background:#333; color:#fff;
+  border:none; padding:10px 12px;
+  border-radius:8px; font-size:13px;
 }
 button:hover{background:#555;}
 #joaPanel{
-  display:none;
-  position:fixed;
-  right:12px;
-  bottom:70px;
-  background:#222;
-  padding:12px;
-  border-radius:8px;
-  font-size:12px;
-  line-height:1.4;
-  max-width:260px;
+  display:none; position:fixed;
+  right:12px; bottom:70px;
+  background:#222; padding:12px;
+  border-radius:8px; font-size:12px;
 }
-table{
-  width:100%;
-  border-collapse:collapse;
-  margin-top:6px;
-}
-td,th{
-  border:1px solid #555;
-  padding:3px;
-  text-align:center;
-}
+table{width:100%;border-collapse:collapse;margin-top:6px;}
+td,th{border:1px solid #555;padding:3px;text-align:center;}
 </style>
 </head>
 
 <body>
 
-<h1>手指 可動域解析（動画）</h1>
+<h1>手指 可動域解析（動画・2指固定）</h1>
 
 <div id="guide">
 <b>撮影ガイド</b><br>
-・ご自身で撮影する場合：<b>内側（手掌側）カメラを推奨</b><br>
-・他者が撮影する場合：背側／やや斜位でも可<br><br>
-<b>測定のコツ</b><br>
-・中指 → 薬指・小指を先に屈曲<br>
-・最後に人さし指を屈曲<br>
-・伸展時は逆順<br><br>
-※ 人さし指は最も難しく、2–3回の撮り直しが必要なことがあります（正常）
+・ご自身で撮影する場合：<b>内側（手掌側）カメラ推奨</b><br>
+・他者撮影：背側／やや斜位でも可<br><br>
+<b>重要</b><br>
+・<b>親指側</b>：人さし指＋中指<br>
+・<b>小指側</b>：薬指＋小指<br>
+・指を意図的に離す必要はありません<br>
+・わずかに背側寄り／手掌寄りが必要です
 </div>
 
 <div id="controls">
+<b>測定グループ</b><br>
+<label>
+  <input type="radio" name="group" value="thumb" checked>
+  親指側（人さし指・中指）
+</label>
+<label style="margin-left:8px;">
+  <input type="radio" name="group" value="pinky">
+  小指側（薬指・小指）
+</label>
+<br><br>
 <input type="file" id="videoInput" accept="video/*">
 <button onclick="analyze()">解析開始</button>
 </div>
 
 <div id="result">動画を選択してください</div>
-
 <div id="hud"></div>
 
 <div id="buttons">
@@ -115,14 +93,13 @@ td,th{
 <tr><td>薬指</td><td>90°</td><td>100°</td><td>70°</td></tr>
 <tr><td>小指</td><td>90°</td><td>100°</td><td>70°</td></tr>
 </table>
-<div style="margin-top:6px;">
-※ 本アプリは画像解析による推定値です
-</div>
+<div style="margin-top:6px;">※ 画像解析による推定値</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 
 <script>
+/* ===== 共通 ===== */
 let DEBUG_LOG=[];
 function log(m){
   const t=new Date().toLocaleTimeString();
@@ -155,12 +132,27 @@ async function seekVideo(video,time){
   });
 }
 
+/* ===== 2指グループ固定 ===== */
+const GROUPS={
+  thumb:{
+    index:[5,6,7,8],
+    middle:[9,10,11,12]
+  },
+  pinky:{
+    ring:[13,14,15,16],
+    pinky:[17,18,19,20]
+  }
+};
+
 async function analyze(){
   DEBUG_LOG=[];
   log("analyze() start");
 
   const file=document.getElementById("videoInput").files[0];
   if(!file){log("no video");return;}
+
+  const group=document.querySelector('input[name="group"]:checked').value;
+  const fingers=GROUPS[group];
 
   const video=document.createElement("video");
   video.src=URL.createObjectURL(file);
@@ -169,13 +161,6 @@ async function analyze(){
 
   const canvas=document.createElement("canvas");
   const ctx=canvas.getContext("2d");
-
-  const fingers={
-    index:[5,6,7,8],
-    middle:[9,10,11,12],
-    ring:[13,14,15,16],
-    pinky:[17,18,19,20]
-  };
 
   let data={};
   for(let f in fingers){
@@ -201,16 +186,8 @@ async function analyze(){
       if(a2!=null) data[f].PIP.push(a2);
       if(a3!=null) data[f].DIP.push(a3);
 
-      const d=Math.hypot(
-        lm[tip].x-palm.x,
-        lm[tip].y-palm.y,
-        (lm[tip].z||0)-(palm.z||0)
-      );
-      const norm=Math.hypot(
-        lm[mcp].x-palm.x,
-        lm[mcp].y-palm.y,
-        (lm[mcp].z||0)-(palm.z||0)
-      );
+      const d=Math.hypot(lm[tip].x-palm.x,lm[tip].y-palm.y,(lm[tip].z||0)-(palm.z||0));
+      const norm=Math.hypot(lm[mcp].x-palm.x,lm[mcp].y-palm.y,(lm[mcp].z||0)-(palm.z||0));
       if(isFinite(d/norm)) data[f].dist.push(d/norm);
     }
   });
@@ -230,14 +207,14 @@ async function analyze(){
   }
 
   let html="<b>測定結果</b><br><br>";
+  const flex=x=>180-Math.min(...x);
+  const ext=x=>180-Math.max(...x);
+
   for(let f in data){
     const d=data[f];
     if(d.MCP.length===0){
-      html+=`${f}: 測定不可<br><br>`;
-      continue;
+      html+=`${f}: 測定不可<br><br>`; continue;
     }
-    const flex=x=>180-Math.min(...x);
-    const ext=x=>180-Math.max(...x);
     html+=`<b>${f}</b><br>
     MCP：屈曲 ${flex(d.MCP).toFixed(1)}° / 伸展 ${ext(d.MCP).toFixed(1)}°<br>
     PIP：屈曲 ${flex(d.PIP).toFixed(1)}° / 伸展 ${ext(d.PIP).toFixed(1)}°<br>
