@@ -14,6 +14,17 @@ function copyDebugLog(){
   alert("デバッグログをコピーしました");
 }
 
+function seekVideo(video, time){
+  return new Promise(resolve => {
+    const handler = () => {
+      video.removeEventListener("seeked", handler);
+      resolve();
+    };
+    video.addEventListener("seeked", handler);
+    video.currentTime = time;
+  });
+}
+
 async function analyze(){
 
   hud = document.getElementById("hud");
@@ -68,14 +79,14 @@ async function analyze(){
     DIP.push(innerAngle(PIPp, DIPp, TIP));
   });
 
-  // ===== フレーム処理 =====
+  // ===== フレーム処理（★ここが修正点）=====
   let frameIndex = 0;
-  for (let t = 0; t < video.duration; t += 1/FPS){
+  for (let t = 0; t < video.duration; t += 1 / FPS){
     frameIndex++;
-    log(`frame ${frameIndex}, t=${t.toFixed(2)}s`);
+    log(`frame ${frameIndex}, seek to ${t.toFixed(2)}s`);
 
-    video.currentTime = t;
-    await new Promise(r => setTimeout(r, 120));
+    await seekVideo(video, t);
+    log("seeked");
 
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -100,9 +111,9 @@ async function analyze(){
     return;
   }
 
-  // ===== ★屈曲角の正規化（ここが修正点）=====
+  // ===== 屈曲角（臨床定義）=====
   // 内角：伸展≈180°, 屈曲ほど小
-  // 臨床屈曲角 = 180 - 最小内角
+  // 屈曲角 = 180 - 最小内角
   const res = {
     MCP: 180 - Math.min(...MCP),
     PIP: 180 - Math.min(...PIP),
