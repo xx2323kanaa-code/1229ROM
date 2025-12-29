@@ -63,9 +63,9 @@ async function analyze(){
     const DIPp = lm[19];
     const TIP  = lm[20];
 
-    MCP.push(angle(PALM, MCPp, PIPp));
-    PIP.push(angle(MCPp, PIPp, DIPp));
-    DIP.push(angle(PIPp, DIPp, TIP));
+    MCP.push(innerAngle(PALM, MCPp, PIPp));
+    PIP.push(innerAngle(MCPp, PIPp, DIPp));
+    DIP.push(innerAngle(PIPp, DIPp, TIP));
   });
 
   // ===== フレーム処理 =====
@@ -92,7 +92,7 @@ async function analyze(){
   const vis = detectedFrames / totalFrames;
   if (vis < 0.7){
     out.innerHTML = `
-      <span class="warn">
+      <span style="color:#ffcc00">
       ⚠️ 小指が十分に見えていません。<br>
       側面から撮影してください。
       </span>`;
@@ -100,15 +100,17 @@ async function analyze(){
     return;
   }
 
-  // ===== 屈曲最大 =====
+  // ===== ★屈曲角の正規化（ここが修正点）=====
+  // 内角：伸展≈180°, 屈曲ほど小
+  // 臨床屈曲角 = 180 - 最小内角
   const res = {
-    MCP: Math.max(...MCP),
-    PIP: Math.max(...PIP),
-    DIP: Math.max(...DIP)
+    MCP: 180 - Math.min(...MCP),
+    PIP: 180 - Math.min(...PIP),
+    DIP: 180 - Math.min(...DIP)
   };
 
   out.innerHTML = `
-    <span class="ok"><b>測定完了</b></span><br><br>
+    <span style="color:#66ff99"><b>測定完了</b></span><br><br>
     MCP屈曲：${res.MCP.toFixed(1)}°<br>
     PIP屈曲：${res.PIP.toFixed(1)}°<br>
     DIP屈曲：${res.DIP.toFixed(1)}°
@@ -117,8 +119,8 @@ async function analyze(){
   log("analysis finished");
 }
 
-// ===== 角度 =====
-function angle(a,b,c){
+// ===== 3点内角 =====
+function innerAngle(a,b,c){
   const ab = {x:a.x-b.x, y:a.y-b.y};
   const cb = {x:c.x-b.x, y:c.y-b.y};
   const dot = ab.x*cb.x + ab.y*cb.y;
