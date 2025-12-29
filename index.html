@@ -5,21 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Little Finger Flexion ROM Analyzer</title>
 <style>
-body {
+body{
   font-family:sans-serif;
   background:#111;
   color:#eee;
   text-align:center;
   padding:20px;
 }
-button {
+button{
   font-size:16px;
   padding:8px 16px;
   margin-top:10px;
 }
-#result { margin-top:20px; line-height:1.6; }
-
-#hud {
+#result{
+  margin-top:20px;
+  line-height:1.6;
+}
+#hud{
   position:fixed;
   top:10px;
   left:10px;
@@ -31,14 +33,12 @@ button {
   text-align:left;
   z-index:9999;
 }
-#copyBtn {
+#copyBtn{
   position:fixed;
   bottom:10px;
   right:10px;
   z-index:9999;
 }
-.warn { color:#ffcc00; }
-.ok { color:#66ff99; }
 </style>
 </head>
 <body>
@@ -47,8 +47,8 @@ button {
 
 <p>
 ひじを机に置き、<br>
-小指を<strong>ゆっくり最大まで曲げる</strong><br>
-だけでOKです。
+小指を<strong>ゆっくり最大まで曲げてください</strong><br>
+（最大屈曲で一瞬止めると安定します）
 </p>
 
 <input type="file" id="videoInput" accept="video/*"><br><br>
