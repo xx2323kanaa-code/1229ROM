@@ -39,7 +39,7 @@ async function analyze(){
 
   out.innerText = "解析中…";
 
-  // ===== 動画準備 =====
+  // ===== 動画 =====
   const video = document.createElement("video");
   video.src = URL.createObjectURL(file);
   await video.play();
@@ -78,49 +78,55 @@ async function analyze(){
     DIP.push(innerAngle3D(PIPp, DIPp, TIP));
   });
 
-  // ===== フレーム解析 =====
-  let frameIndex = 0;
+  // ===== フレーム処理 =====
   for(let t=0; t<video.duration; t+=1/FPS){
-    frameIndex++;
-    log(`frame ${frameIndex}, seek ${t.toFixed(2)}s`);
-
+    log(`seek ${t.toFixed(2)}s`);
     await seekVideo(video, t);
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video,0,0);
 
-    log("hands.send start");
     await hands.send({image:canvas});
-    log("hands.send done");
   }
 
   log(`frames done total=${totalFrames} detected=${detectedFrames}`);
 
-  // ===== 品質チェック =====
+  // ===== 品質 =====
   if(detectedFrames/totalFrames < 0.7){
     out.innerHTML = "⚠️ 小指が十分に写っていません（側面から撮影してください）";
     log("visibility low");
     return;
   }
 
-  // ===== 屈曲角（臨床定義）=====
+  // ===== 屈曲・伸展角 =====
+  // 内角：伸展≈180°, 屈曲ほど小
   const result = {
-    MCP: 180 - Math.min(...MCP),
-    PIP: 180 - Math.min(...PIP),
-    DIP: 180 - Math.min(...DIP)
+    MCP_flex: 180 - Math.min(...MCP),
+    MCP_ext:  Math.max(...MCP) - 180,
+    PIP_flex: 180 - Math.min(...PIP),
+    PIP_ext:  Math.max(...PIP) - 180,
+    DIP_flex: 180 - Math.min(...DIP),
+    DIP_ext:  Math.max(...DIP) - 180
   };
 
   out.innerHTML = `
     <b>測定完了</b><br><br>
-    MCP屈曲：${result.MCP.toFixed(1)}°<br>
-    PIP屈曲：${result.PIP.toFixed(1)}°<br>
-    DIP屈曲：${result.DIP.toFixed(1)}°
+
+    MCP：屈曲 ${result.MCP_flex.toFixed(1)}° /
+    伸展 ${result.MCP_ext.toFixed(1)}°<br>
+
+    PIP：屈曲 ${result.PIP_flex.toFixed(1)}° /
+    伸展 ${result.PIP_ext.toFixed(1)}°<br>
+
+    DIP：屈曲 ${result.DIP_flex.toFixed(1)}° /
+    伸展 ${result.DIP_ext.toFixed(1)}°
   `;
 
   log("analysis finished");
 }
 
-// ===== 3D内角計算（★最重要）=====
+// ===== 3D内角 =====
 function innerAngle3D(a,b,c){
   const ab = {x:a.x-b.x, y:a.y-b.y, z:a.z-b.z};
   const cb = {x:c.x-b.x, y:c.y-b.y, z:c.z-b.z};
