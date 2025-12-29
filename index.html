@@ -2,67 +2,169 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<title>Little Finger ROM Analyzer (Flex/Ext)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Little Finger ROM Analyzer (Flex + Ext)</title>
-<style>
-body{
-  font-family:sans-serif;
-  background:#111;
-  color:#eee;
-  text-align:center;
-  padding:20px;
-}
-button{
-  font-size:16px;
-  padding:8px 16px;
-  margin-top:10px;
-}
-#result{
-  margin-top:20px;
-  line-height:1.6;
-}
-#hud{
-  position:fixed;
-  top:10px;
-  left:10px;
-  background:rgba(0,0,0,0.8);
-  color:#0f0;
-  font-size:12px;
-  padding:8px;
-  max-width:90vw;
-  text-align:left;
-  z-index:9999;
-}
-#copyBtn{
-  position:fixed;
-  bottom:10px;
-  right:10px;
-  z-index:9999;
-}
-</style>
-</head>
-<body>
-
-<h2>小指 可動域（屈曲・伸展）一括計測</h2>
-
-<p>
-ひじを机に置き、<br>
-<strong>
-① しっかり伸ばして1秒止める<br>
-② ゆっくり最大まで曲げて1秒止める
-</strong><br>
-を行ってください。
-</p>
-
-<input type="file" id="videoInput" accept="video/*"><br><br>
-<button onclick="analyze()">解析する</button>
-
-<div id="result"></div>
-
-<div id="hud">HUD: idle</div>
-<button id="copyBtn" onclick="copyDebugLog()">ログコピー</button>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="analyze.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<style>
+body{font-family:sans-serif;background:#111;color:#eee;padding:10px}
+#hud{background:#222;padding:6px;margin:6px 0;font-size:12px}
+#result{margin-top:10px;font-size:16px}
+button{margin-top:6px}
+</style>
+</head>
+
+<body>
+
+<h3>小指ROM解析（屈曲＋伸展）</h3>
+
+<input type="file" id="videoInput" accept="video/*"><br>
+<button onclick="analyze()">解析開始</button>
+<button onclick="copyDebugLog()">ログコピー</button>
+
+<div id="hud">ready</div>
+<div id="result"></div>
+
+<script>
+/* =======================
+   DEBUG LOG
+======================= */
+let DEBUG_LOG = [];
+let hud;
+
+function log(msg){
+  const t = new Date().toLocaleTimeString();
+  const line = `[${t}] ${msg}`;
+  DEBUG_LOG.push(line);
+  if(hud) hud.innerText = line;
+}
+
+function copyDebugLog(){
+  navigator.clipboard.writeText(DEBUG_LOG.join("\n"));
+  alert("デバッグログをコピーしました");
+}
+
+/* =======================
+   UTILS
+======================= */
+function innerAngle(a,b,c){
+  const ab = {x:a.x-b.x, y:a.y-b.y};
+  const cb = {x:c.x-b.x, y:c.y-b.y};
+  const dot = ab.x*cb.x + ab.y*cb.y;
+  const mag = Math.hypot(ab.x,ab.y)*Math.hypot(cb.x,cb.y);
+  return Math.acos(dot/mag)*180/Math.PI;
+}
+
+function seekVideo(video,time){
+  return new Promise(resolve=>{
+    const h=()=>{video.removeEventListener("seeked",h);resolve();}
+    video.addEventListener("seeked",h);
+    video.currentTime=time;
+  });
+}
+
+async function safeSend(hands,canvas){
+  return Promise.race([
+    hands.send({image:canvas}),
+    new Promise((_,rej)=>setTimeout(()=>rej("timeout"),1500))
+  ]);
+}
+
+/* =======================
+   MAIN
+======================= */
+async function analyze(){
+
+  DEBUG_LOG=[];
+  hud=document.getElementById("hud");
+  const out=document.getElementById("result");
+  log("analyze() start");
+
+  const file=document.getElementById("videoInput").files[0];
+  if(!file){out.innerText="動画を選択してください";return;}
+
+  const video=document.createElement("video");
+  video.src=URL.createObjectURL(file);
+  await video.play();
+  log(`video loaded (${video.duration.toFixed(2)}s)`);
+
+  const canvas=document.createElement("canvas");
+  const ctx=canvas.getContext("2d");
+
+  const hands=new Hands({
+    locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+  });
+  hands.setOptions({maxNumHands:1,modelComplexity:1});
+
+  let MCP=[],PIP=[],DIP=[];
+  let total=0,detected=0;
+
+  hands.onResults(res=>{
+    total++;
+    if(!res.multiHandLandmarks) return;
+    detected++;
+
+    const lm=res.multiHandLandmarks[0];
+    const PALM=lm[0], MCPp=lm[17], PIPp=lm[18], DIPp=lm[19], TIP=lm[20];
+
+    MCP.push(innerAngle(PALM,MCPp,PIPp));
+    PIP.push(innerAngle(MCPp,PIPp,DIPp));
+    DIP.push(innerAngle(PIPp,DIPp,TIP));
+  });
+
+  const FPS=2;
+
+  for(let t=0.5;t<video.duration;t+=1/FPS){
+    log(`seek ${t.toFixed(2)}s`);
+    await seekVideo(video,t);
+    await new Promise(r=>requestAnimationFrame(r));
+
+    canvas.width=video.videoWidth;
+    canvas.height=video.videoHeight;
+    ctx.drawImage(video,0,0);
+
+    try{
+      await safeSend(hands,canvas);
+    }catch(e){
+      log("hands.send failed, skip frame");
+      continue;
+    }
+  }
+
+  log(`frames done total=${total} detected=${detected}`);
+
+  if(detected/total<0.7){
+    out.innerHTML="<span style='color:#ffcc00'>⚠ 側面から再撮影してください</span>";
+    return;
+  }
+
+  const res={
+    MCP:{
+      flex:180-Math.min(...MCP),
+      ext:Math.max(...MCP)-180
+    },
+    PIP:{
+      flex:180-Math.min(...PIP),
+      ext:Math.max(...PIP)-180
+    },
+    DIP:{
+      flex:180-Math.min(...DIP),
+      ext:Math.max(...DIP)-180
+    }
+  };
+
+  out.innerHTML=`
+<b>測定完了</b><br><br>
+MCP：屈曲 ${res.MCP.flex.toFixed(1)}° / 伸展 ${res.MCP.ext.toFixed(1)}°<br>
+PIP：屈曲 ${res.PIP.flex.toFixed(1)}° / 伸展 ${res.PIP.ext.toFixed(1)}°<br>
+DIP：屈曲 ${res.DIP.flex.toFixed(1)}° / 伸展 ${res.DIP.ext.toFixed(1)}°
+`;
+
+  log("analysis finished");
+}
+</script>
+
 </body>
 </html>
