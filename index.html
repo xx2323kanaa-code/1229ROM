@@ -2,69 +2,93 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>Little Finger ROM Analyzer (Flex/Ext)</title>
+<title>Finger ROM Analyzer (Multi-finger)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <style>
-body{font-family:sans-serif;background:#111;color:#eee;padding:10px}
-#hud{background:#222;padding:6px;margin:6px 0;font-size:12px}
-#result{margin-top:10px;font-size:16px}
-button{margin-top:6px}
+body{font-family:system-ui,-apple-system,sans-serif;background:#111;color:#eee;padding:12px}
+h3{margin:6px 0}
+.box{background:#1b1b1b;border-radius:8px;padding:10px;margin:8px 0}
+small{color:#bbb}
+button{margin:6px 4px;padding:6px 10px}
+#hud{background:#222;padding:6px;border-radius:6px;font-size:12px}
+#result{margin-top:10px;font-size:15px;line-height:1.5}
+.warn{color:#ffcc66}
+.err{color:#ff6666}
+.ok{color:#66ff99}
+label{margin-right:10px}
 </style>
 </head>
 
 <body>
 
-<h3>小指ROM解析（屈曲＋伸展）</h3>
+<h3>指ROM解析（屈曲・伸展＋指尖―手掌距離）</h3>
 
+<div class="box">
+<b>撮影ガイド</b><br>
+<small>
+・完全な側面像では指が重なり、解析できない場合があります。<br>
+・<b>側面から数度だけ、背側または手掌側に傾けて</b>撮影してください。<br>
+・人さし指・中指：<b>親指側から</b> ／ 薬指・小指：<b>小指側から</b><br>
+・ご自身で撮影する場合、<b>内側カメラ（自撮りカメラ）が使用できる場合は推奨</b>します。<br>
+・屈曲・伸展・完全屈曲で、それぞれ<b>1秒停止</b>してください。
+</small>
+</div>
+
+<div class="box">
+<b>撮影セット</b><br>
+<label><input type="radio" name="set" value="IM" checked> 人さし指＋中指</label>
+<label><input type="radio" name="set" value="RL"> 薬指＋小指</label>
+</div>
+
+<div class="box">
 <input type="file" id="videoInput" accept="video/*"><br>
 <button onclick="analyze()">解析開始</button>
 <button onclick="copyDebugLog()">ログコピー</button>
+</div>
 
 <div id="hud">ready</div>
 <div id="result"></div>
 
 <script>
 /* =======================
-   DEBUG LOG
+   DEBUG
 ======================= */
-let DEBUG_LOG = [];
+let DEBUG_LOG=[];
 let hud;
-
-function log(msg){
-  const t = new Date().toLocaleTimeString();
-  const line = `[${t}] ${msg}`;
-  DEBUG_LOG.push(line);
-  if(hud) hud.innerText = line;
+function log(m){
+  const t=new Date().toLocaleTimeString();
+  const s=`[${t}] ${m}`;
+  DEBUG_LOG.push(s);
+  if(hud) hud.innerText=s;
 }
-
 function copyDebugLog(){
   navigator.clipboard.writeText(DEBUG_LOG.join("\n"));
-  alert("デバッグログをコピーしました");
+  alert("ログをコピーしました");
 }
 
 /* =======================
    UTILS
 ======================= */
 function innerAngle(a,b,c){
-  const ab = {x:a.x-b.x, y:a.y-b.y};
-  const cb = {x:c.x-b.x, y:c.y-b.y};
-  const dot = ab.x*cb.x + ab.y*cb.y;
-  const mag = Math.hypot(ab.x,ab.y)*Math.hypot(cb.x,cb.y);
+  const ab={x:a.x-b.x,y:a.y-b.y};
+  const cb={x:c.x-b.x,y:c.y-b.y};
+  const dot=ab.x*cb.x+ab.y*cb.y;
+  const mag=Math.hypot(ab.x,ab.y)*Math.hypot(cb.x,cb.y);
   return Math.acos(dot/mag)*180/Math.PI;
 }
-
+function dist(a,b){
+  return Math.hypot(a.x-b.x,a.y-b.y);
+}
 function seekVideo(video,time){
-  return new Promise(resolve=>{
-    const h=()=>{video.removeEventListener("seeked",h);resolve();}
+  return new Promise(res=>{
+    const h=()=>{video.removeEventListener("seeked",h);res();}
     video.addEventListener("seeked",h);
     video.currentTime=time;
   });
 }
-
 async function safeSend(hands,canvas){
   return Promise.race([
     hands.send({image:canvas}),
@@ -73,17 +97,31 @@ async function safeSend(hands,canvas){
 }
 
 /* =======================
+   LANDMARK MAP
+======================= */
+// finger name -> indices (MCP,PIP,DIP,TIP)
+const FINGERS={
+  index:{mcp:5,pip:6,dip:7,tip:8},
+  middle:{mcp:9,pip:10,dip:11,tip:12},
+  ring:{mcp:13,pip:14,dip:15,tip:16},
+  little:{mcp:17,pip:18,dip:19,tip:20}
+};
+
+/* =======================
    MAIN
 ======================= */
 async function analyze(){
-
   DEBUG_LOG=[];
   hud=document.getElementById("hud");
   const out=document.getElementById("result");
+  out.innerHTML="";
   log("analyze() start");
 
   const file=document.getElementById("videoInput").files[0];
-  if(!file){out.innerText="動画を選択してください";return;}
+  if(!file){out.innerHTML="<span class='err'>動画を選択してください</span>";return;}
+
+  const set=document.querySelector("input[name='set']:checked").value;
+  const targets = (set==="IM") ? ["index","middle"] : ["ring","little"];
 
   const video=document.createElement("video");
   video.src=URL.createObjectURL(file);
@@ -98,33 +136,43 @@ async function analyze(){
   });
   hands.setOptions({maxNumHands:1,modelComplexity:1});
 
-  let MCP=[],PIP=[],DIP=[];
+  const data={};
+  targets.forEach(f=>{
+    data[f]={MCP:[],PIP:[],DIP:[],TIPPALM:[]};
+  });
+
   let total=0,detected=0;
 
   hands.onResults(res=>{
     total++;
     if(!res.multiHandLandmarks) return;
     detected++;
-
     const lm=res.multiHandLandmarks[0];
-    const PALM=lm[0], MCPp=lm[17], PIPp=lm[18], DIPp=lm[19], TIP=lm[20];
 
-    MCP.push(innerAngle(PALM,MCPp,PIPp));
-    PIP.push(innerAngle(MCPp,PIPp,DIPp));
-    DIP.push(innerAngle(PIPp,DIPp,TIP));
+    const PALM_CENTER={
+      x:(lm[0].x+lm[9].x)/2,
+      y:(lm[0].y+lm[9].y)/2
+    };
+    const handScale=dist(lm[0],lm[9])||1;
+
+    targets.forEach(f=>{
+      const idx=FINGERS[f];
+      const MCP=lm[idx.mcp], PIP=lm[idx.pip], DIP=lm[idx.dip], TIP=lm[idx.tip];
+      data[f].MCP.push(innerAngle(lm[0],MCP,PIP));
+      data[f].PIP.push(innerAngle(MCP,PIP,DIP));
+      data[f].DIP.push(innerAngle(PIP,DIP,TIP));
+      data[f].TIPPALM.push(dist(TIP,PALM_CENTER)/handScale);
+    });
   });
 
   const FPS=2;
-
   for(let t=0.5;t<video.duration;t+=1/FPS){
     log(`seek ${t.toFixed(2)}s`);
     await seekVideo(video,t);
     await new Promise(r=>requestAnimationFrame(r));
-
     canvas.width=video.videoWidth;
     canvas.height=video.videoHeight;
     ctx.drawImage(video,0,0);
-
     try{
       await safeSend(hands,canvas);
     }catch(e){
@@ -135,33 +183,33 @@ async function analyze(){
 
   log(`frames done total=${total} detected=${detected}`);
 
-  if(detected/total<0.7){
-    out.innerHTML="<span style='color:#ffcc00'>⚠ 側面から再撮影してください</span>";
-    return;
+  // validity check
+  for(const f of targets){
+    if(data[f].MCP.length<5){
+      out.innerHTML="<span class='err'>⚠ 指が十分に検出できませんでした。側面から数度背側または掌側に傾けて再撮影してください。</span>";
+      log("insufficient landmarks");
+      return;
+    }
   }
 
-  const res={
-    MCP:{
-      flex:180-Math.min(...MCP),
-      ext:Math.max(...MCP)-180
-    },
-    PIP:{
-      flex:180-Math.min(...PIP),
-      ext:Math.max(...PIP)-180
-    },
-    DIP:{
-      flex:180-Math.min(...DIP),
-      ext:Math.max(...DIP)-180
-    }
-  };
+  // result
+  let html="<div class='ok'><b>測定完了</b></div><br>";
+  targets.forEach(f=>{
+    const r={
+      MCP:{flex:180-Math.min(...data[f].MCP), ext:Math.max(...data[f].MCP)-180},
+      PIP:{flex:180-Math.min(...data[f].PIP), ext:Math.max(...data[f].PIP)-180},
+      DIP:{flex:180-Math.min(...data[f].DIP), ext:Math.max(...data[f].DIP)-180},
+      gap:Math.min(...data[f].TIPPALM)
+    };
+    const name = (f==="index")?"人さし指":(f==="middle")?"中指":(f==="ring")?"薬指":"小指";
+    html+=`<b>${name}</b><br>
+    MCP：屈曲 ${r.MCP.flex.toFixed(1)}° / 伸展 ${r.MCP.ext.toFixed(1)}°<br>
+    PIP：屈曲 ${r.PIP.flex.toFixed(1)}° / 伸展 ${r.PIP.ext.toFixed(1)}°<br>
+    DIP：屈曲 ${r.DIP.flex.toFixed(1)}° / 伸展 ${r.DIP.ext.toFixed(1)}°<br>
+    完全屈曲 指尖―手掌距離（正規化）： ${r.gap.toFixed(2)}<br><br>`;
+  });
 
-  out.innerHTML=`
-<b>測定完了</b><br><br>
-MCP：屈曲 ${res.MCP.flex.toFixed(1)}° / 伸展 ${res.MCP.ext.toFixed(1)}°<br>
-PIP：屈曲 ${res.PIP.flex.toFixed(1)}° / 伸展 ${res.PIP.ext.toFixed(1)}°<br>
-DIP：屈曲 ${res.DIP.flex.toFixed(1)}° / 伸展 ${res.DIP.ext.toFixed(1)}°
-`;
-
+  out.innerHTML=html;
   log("analysis finished");
 }
 </script>
