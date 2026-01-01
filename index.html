@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>Hand ROM Analyzer（2指グループ固定）</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+body{
+  font-family: system-ui, -apple-system, BlinkMacSystemFont;
+  background:#111; color:#eee;
+  margin:0; padding:16px;
+}
+h1{font-size:18px;margin:0 0 8px 0;}
+#guide{
+  font-size:13px; background:#222;
+  padding:10px; border-radius:8px; margin-bottom:10px;
+}
+#controls{margin-bottom:10px;}
+#result{
+  margin-top:10px; padding:10px;
+  background:#1c1c1c; border-radius:8px; line-height:1.5;
+}
+#hud{
+  position:fixed; top:8px; left:8px;
+  font-size:11px; color:#9f9;
+}
+#buttons{
+  position:fixed; right:12px; bottom:12px;
+  display:flex; gap:10px;
+}
+button{
+  background:#333; color:#fff;
+  border:none; padding:10px 12px;
+  border-radius:8px; font-size:13px;
+}
+button:hover{background:#555;}
+#joaPanel{
+  display:none; position:fixed;
+  right:12px; bottom:70px;
+  background:#222; padding:12px;
+  border-radius:8px; font-size:12px;
+}
+table{width:100%;border-collapse:collapse;margin-top:6px;}
+td,th{border:1px solid #555;padding:3px;text-align:center;}
+</style>
+</head>
+
+<body>
+
+<h1>手指 可動域解析（動画・2指固定）</h1>
+
+<div id="guide">
+<b>撮影ガイド</b><br>
+・ご自身で撮影する場合：<b>内側（手掌側）カメラ推奨</b><br>
+・他者撮影：背側／やや斜位でも可<br><br>
+<b>重要</b><br>
+・<b>親指側</b>：人さし指＋中指<br>
+・<b>小指側</b>：薬指＋小指<br>
+・指を意図的に離す必要はありません<br>
+・わずかに背側寄り／手掌寄りが必要です
+</div>
+
+<div id="controls">
+<b>測定グループ</b><br>
+<label>
+  <input type="radio" name="group" value="thumb" checked>
+  親指側（人さし指・中指）
+</label>
+<label style="margin-left:8px;">
+  <input type="radio" name="group" value="pinky">
+  小指側（薬指・小指）
+</label>
+<br><br>
+<input type="file" id="videoInput" accept="video/*">
+<button onclick="analyze()">解析開始</button>
+</div>
+
+<div id="result">動画を選択してください</div>
+<div id="hud"></div>
+
+<div id="buttons">
+<button onclick="copyDebugLog()">ログコピー</button>
+<button onclick="toggleJOA()">JOA標準値</button>
+</div>
+
+<div id="joaPanel">
+<b>JOA 手指関節可動域（参考）</b>
+<table>
+<tr><th>指</th><th>MCP</th><th>PIP</th><th>DIP</th></tr>
+<tr><td>示指</td><td>90°</td><td>100°</td><td>70°</td></tr>
+<tr><td>中指</td><td>90°</td><td>100°</td><td>70°</td></tr>
+<tr><td>薬指</td><td>90°</td><td>100°</td><td>70°</td></tr>
+<tr><td>小指</td><td>90°</td><td>100°</td><td>70°</td></tr>
+</table>
+<div style="margin-top:6px;">※ 画像解析による推定値</div>
+</div>
+
+<!-- MediaPipe Hands 本体 -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+
+<!-- UI用ユーティリティ（analyzeは含まない） -->
+<script>
+let DEBUG_LOG=[];
+function log(m){
+  const t=new Date().toLocaleTimeString();
+  DEBUG_LOG.push(`[${t}] ${m}`);
+  document.getElementById("hud").innerText=m;
+}
+function copyDebugLog(){
+  navigator.clipboard.writeText(DEBUG_LOG.join("\n"));
+  alert("ログをコピーしました");
+}
+function toggleJOA(){
+  const p=document.getElementById("joaPanel");
+  p.style.display=(p.style.display==="none")?"block":"none";
+}
+</script>
+
+<!-- ★ 外部 Analyze 本体（これだけが解析ロジック） -->
+<script src="./analyze.js?v=20260101"></script>
+
+</body>
+</html>
