@@ -1,3 +1,5 @@
+log("ROM analyzer external JS");
+
 let DEBUG_LOG = [];
 let hud;
 
